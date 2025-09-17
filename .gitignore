@@ -132,11 +132,12 @@ dmypy.json
 # ================
 
 # Input files (Excel data) - KHÔNG đưa lên git
-input/
+input/*
 
 # Templates - KHÔNG đưa lên git (có thể chứa thông tin nhạy cảm)
-templates/
-
+templates/*
+!input/.gitkeep
+!templates/.gitkeep
 # Output files (generated certificates) - Tự tạo ra
 output/
 
