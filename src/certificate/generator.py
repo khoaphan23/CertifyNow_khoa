@@ -479,7 +479,7 @@ class CertificateGenerator:
             return False
 
     def _use_word_com_simple(self, replacements, output_file):
-        """Sử dụng Word COM với DEBUG MODE - hiển thị Word để xem chuyện gì xảy ra"""
+        """Sử dụng Word COM với Find & Replace - GIỮ NGUYÊN FORMATTING"""
         try:
             import win32com.client
         except ImportError:
@@ -491,77 +491,71 @@ class CertificateGenerator:
         doc = None
         try:
             if self.logger:
-                self.logger.info("🔧 Đang sử dụng Word COM DEBUG MODE...")
+                self.logger.info("🔧 Đang sử dụng Word COM...")
 
             # Khởi tạo Word
             word = win32com.client.Dispatch("Word.Application")
-            word.Visible = True  # HIỂN THỊ Word để debug
+            word.Visible = False
             word.DisplayAlerts = 0
             
-            # Mở template gốc trực tiếp (không copy)
+            # Mở template - tạo bản sao để tránh lock
+            temp_template = Path(self.template_path).parent / f"temp_{Path(self.template_path).name}"
+            import shutil
+            shutil.copy2(self.template_path, temp_template)
+            
             doc = word.Documents.Open(
-                str(self.template_path.resolve()),
+                str(temp_template.resolve()),
                 ReadOnly=False,
                 AddToRecentFiles=False,
-                Visible=True
+                Visible=False
             )
             
             if self.logger:
                 self.logger.info(f"📄 Document opened: {doc.Name}")
-                self.logger.info("🔍 Word đang hiển thị - bạn có thể xem document!")
-                
-            # Đợi user xác nhận
-            input("👁️ Nhấn Enter sau khi bạn đã xem document trong Word...")
             
             total_replacements = 0
             
-            # Thử replace từng placeholder một và kiểm tra ngay
+            # PHƯƠNG PHÁP MỚI: Sử dụng Find & Replace để GIỮ FORMATTING
             for placeholder, replacement in replacements.items():
                 try:
-                    if self.logger:
-                        self.logger.info(f"🔄 Đang xử lý: {placeholder}")
-                    
-                    # Sử dụng Selection để thay thế (giống như user làm thủ công)
-                    selection = word.Selection
-                    find = selection.Find
-                    
-                    # Reset về đầu document
-                    selection.HomeKey(6)  # wdStory = 6
-                    
-                    # Cấu hình find
+                    # Sử dụng Find của toàn document
+                    find = doc.Content.Find
                     find.ClearFormatting()
                     find.Replacement.ClearFormatting()
+                    
+                    # Cấu hình tìm kiếm
                     find.Text = placeholder
                     find.Replacement.Text = str(replacement) if replacement else ''
                     find.Forward = True
-                    find.Wrap = 1  # wdFindContinue = 1
+                    find.Wrap = 1  # wdFindContinue
                     find.Format = False
                     find.MatchCase = False
                     find.MatchWholeWord = False
+                    find.MatchWildcards = False
+                    find.MatchSoundsLike = False
+                    find.MatchAllWordForms = False
                     
-                    # Thực hiện replace all
-                    replaced = find.Execute(Replace=2)  # wdReplaceAll = 2
+                    # Execute replace all
+                    replaced_count = 0
+                    while find.Execute(Replace=1):  # wdReplaceOne = 1 (từng cái một)
+                        replaced_count += 1
+                        if replaced_count > 20:  # Tránh vòng lặp vô hạn
+                            break
                     
-                    if replaced:
-                        total_replacements += 1
+                    if replaced_count > 0:
+                        total_replacements += replaced_count
                         if self.logger:
-                            self.logger.info(f"   ✅ {placeholder} → {replacement}")
-                        
-                        # Đợi để user có thể thấy thay đổi
-                        input(f"👀 Đã thay thế {placeholder}. Nhấn Enter để tiếp tục...")
+                            self.logger.info(f"   ✅ {placeholder} → {replacement} ({replaced_count} lần)")
                     else:
                         if self.logger:
-                            self.logger.warning(f"   ❌ Không tìm thấy: {placeholder}")
+                            self.logger.debug(f"   ❌ Không tìm thấy: {placeholder}")
                 
                 except Exception as e:
                     if self.logger:
-                        self.logger.error(f"   ⚠️ Lỗi xử lý {placeholder}: {e}")
+                        self.logger.debug(f"   ⚠️ Lỗi xử lý {placeholder}: {e}")
             
             if self.logger:
-                self.logger.info(f"📊 Word COM DEBUG - Tổng thay thế: {total_replacements} vị trí")
-            
-            # Đợi user kiểm tra kết quả cuối cùng
-            input("🔍 Kiểm tra document cuối cùng trong Word. Nhấn Enter để lưu...")
+                self.logger.info(f"📊 Word COM - Tổng thay thế: {total_replacements} vị trí")
             
             # Lưu file
             if output_file:
@@ -571,11 +565,17 @@ class CertificateGenerator:
                 if self.logger:
                     self.logger.info(f"💾 Đã lưu file: {output_file.name}")
             
+            # Xóa file temp
+            try:
+                temp_template.unlink()
+            except:
+                pass
+            
             return True if total_replacements > 0 else False
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ Lỗi Word COM DEBUG: {e}")
+                self.logger.error(f"❌ Lỗi Word COM: {e}")
             return False
         finally:
             # Đóng document và Word
@@ -589,6 +589,8 @@ class CertificateGenerator:
                     word.Quit()
             except:
                 pass
+            # Đợi một chút để Word giải phóng file
+            time.sleep(0.5)
 
     def batch_create(self, data_list, output_folder):
         """Tạo nhiều giấy khen cùng lúc"""

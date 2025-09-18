@@ -308,8 +308,31 @@ def main():
         print("-" * 60)
 
         # Gộp PDF nếu có và được cấu hình
-        if pdf_files and config.getboolean('OUTPUT', 'create_combined_pdf', fallback=True):
+        if pdf_files and config.getboolean('OUTPUT', 'create_combined_pdf', fallback=True): 
             print(f"\n📚 Đang gộp {len(pdf_files)} file PDF...")
+            try:
+                from PyPDF2 import PdfMerger
+                merger = PdfMerger()
+                for pdf in sorted(pdf_files):
+                    merger.append(str(pdf))
+        
+        # Lấy tên file từ config với hỗ trợ placeholder thời gian
+                combined_name_template = config.get('OUTPUT', 'combined_pdf_name', 
+                                           fallback='Chung_chi_%Y%m%d_%H%M%S')
+                combined_name = datetime.now().strftime(combined_name_template)
+                combined_pdf = output_folder / f"{combined_name}.pdf"
+        
+                merger.write(str(combined_pdf))
+                merger.close()
+                logger.info(f"✅ Đã gộp PDF: {combined_pdf.name}")
+                print(f"📄 File gộp: {combined_pdf.name}")
+            except ImportError:
+                logger.info("🔌 Cài đặt PyPDF2 để gộp các file PDF")
+                print("⚠️ Cần cài đặt PyPDF2: pip install PyPDF2")
+            except Exception as e:
+                logger.warning(f"Không thể gộp PDF: {str(e)}")
+                print(f"❌ Lỗi gộp PDF: {str(e)}")            
+                print(f"\n📚 Đang gộp {len(pdf_files)} file PDF...")
             try:
                 from PyPDF2 import PdfMerger
                 merger = PdfMerger()
