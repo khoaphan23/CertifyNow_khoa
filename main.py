@@ -119,7 +119,7 @@ def main():
     print("=" * 70)
     print("📄 TOOL TẠO GIẤY KHEN TỰ ĐỘNG - CHỈ PDF")
     print("   Gia Đình Phật Tử Việt Nam - TP Đà Nẵng")
-    print("   📝 Sử dụng placeholder format: <<Ten_placeholder>>")
+    print("   📋 Sử dụng placeholder format: <<Ten_placeholder>>")
     print("=" * 70)
     
     # Đọc cấu hình
@@ -316,36 +316,39 @@ def main():
                 for pdf in sorted(pdf_files):
                     merger.append(str(pdf))
         
-        # Lấy tên file từ config với hỗ trợ placeholder thời gian
+                # Xử lý tên file từ config - tránh lỗi % formatting
                 combined_name_template = config.get('OUTPUT', 'combined_pdf_name', 
-                                           fallback='Chung_chi_%Y%m%d_%H%M%S')
-                combined_name = datetime.now().strftime(combined_name_template)
+                                                  fallback='Chung_chi_%Y%m%d_%H%M%S')
+                
+                # Xử lý an toàn datetime placeholder
+                try:
+                    # Escape % trong ConfigParser bằng cách dùng raw string
+                    if '%' in combined_name_template:
+                        combined_name = datetime.now().strftime(combined_name_template)
+                        logger.info(f"🕒 Sử dụng datetime template: {combined_name_template}")
+                    else:
+                        # Nếu không có placeholder datetime, dùng tên gốc + timestamp
+                        combined_name = f"{combined_name_template}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                        logger.info(f"📝 Sử dụng tên tĩnh + timestamp: {combined_name}")
+                except (ValueError, TypeError) as e:
+                    # Fallback nếu template có lỗi
+                    fallback_name = f"GiayKhen_TongHop_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                    combined_name = fallback_name
+                    logger.warning(f"⚠️ Template không hợp lệ '{combined_name_template}', dùng mặc định: {fallback_name}")
+                
                 combined_pdf = output_folder / f"{combined_name}.pdf"
-        
+                
                 merger.write(str(combined_pdf))
                 merger.close()
                 logger.info(f"✅ Đã gộp PDF: {combined_pdf.name}")
                 print(f"📄 File gộp: {combined_pdf.name}")
+                
             except ImportError:
-                logger.info("🔌 Cài đặt PyPDF2 để gộp các file PDF")
+                logger.info("📌 Cài đặt PyPDF2 để gộp các file PDF")
                 print("⚠️ Cần cài đặt PyPDF2: pip install PyPDF2")
             except Exception as e:
                 logger.warning(f"Không thể gộp PDF: {str(e)}")
-                print(f"❌ Lỗi gộp PDF: {str(e)}")            
-                print(f"\n📚 Đang gộp {len(pdf_files)} file PDF...")
-            try:
-                from PyPDF2 import PdfMerger
-                merger = PdfMerger()
-                for pdf in sorted(pdf_files):
-                    merger.append(str(pdf))
-                combined_pdf = output_folder / f"GiayKhen_TongHop_{timestamp}.pdf"
-                merger.write(str(combined_pdf))
-                merger.close()
-                logger.info(f"✅ Đã gộp PDF: {combined_pdf.name}")
-            except ImportError:
-                logger.info("📌 Cài đặt PyPDF2 để gộp các file PDF")
-            except Exception as e:
-                logger.warning(f"Không thể gộp PDF: {str(e)}")
+                print(f"❌ Lỗi gộp PDF: {str(e)}")
 
         # Dọn dẹp thư mục temp
         print("\n🧹 Dọn dẹp file tạm...")
@@ -360,7 +363,7 @@ def main():
         print("✅ HOÀN THÀNH!")
         print(f"📊 Đã tạo: {success_count}/{total_records} file PDF")
         print(f"📁 Thư mục kết quả: {output_folder}")
-        print("📝 Chỉ có file PDF (không có DOCX)")
+        print("📋 Chỉ có file PDF (không có DOCX)")
         print("=" * 60)
 
         # Mở thư mục output
@@ -382,7 +385,7 @@ def main():
                 print(f"📂 Đã mở thư mục: {output_folder}")
             except Exception as e:
                 print(f"⚠️ Không thể mở thư mục tự động: {str(e)}")
-                print(f"📍 Vui lòng mở thủ công: {output_folder}")
+                print(f"📁 Vui lòng mở thủ công: {output_folder}")
 
     except Exception as e:
         logger.error(f"Lỗi chính: {str(e)}")
