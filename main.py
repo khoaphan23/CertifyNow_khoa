@@ -41,10 +41,10 @@ def display_config_info(config):
     print("\n📋 THÔNG TIN CẤU HÌNH PLACEHOLDER:")
     print("-" * 70)
     print("Từ Excel (dữ liệu người nhận):")
-    print("  • <<Họ_và_tên>> → Họ và tên")
-    print("  • <<Pháp_danh>> → Pháp danh (nếu trống sẽ hiển thị 'Không có')")
-    print("  • <<Năm_sinh>> → Năm sinh")
-    print("  • <<Đơn_vị>> → Đơn vị")
+    print("  • <<Ho_va_ten>> → Họ và tên")
+    print("  • <<Phap_danh>> → Pháp danh (nếu trống sẽ hiển thị 'Không có')")
+    print("  • <<Nam_sinh>> → Năm sinh")
+    print("  • <<Don_vi>> → Đơn vị")
     
     print("\nTừ Config (có thể chỉnh sửa trong config.ini):")
     issued_by = config.get('CERTIFICATE', 'issued_by', fallback='Ban Hướng Dẫn GĐPT')
@@ -64,10 +64,51 @@ def display_config_info(config):
     print("-" * 70)
     print("📄 HƯỚNG DẪN SỬ DỤNG TRONG WORD TEMPLATE:")
     print("• Đặt các placeholder trên vào file Word template (*.docx)")
-    print("• Ví dụ trong Word: 'Chứng nhận: <<Họ_và_tên>>'")
-    print("• Ví dụ trong Word: 'Pháp danh: <<Pháp_danh>>'")
+    print("• Ví dụ trong Word: 'Chứng nhận: <<Ho_va_ten>>'")
+    print("• Ví dụ trong Word: 'Pháp danh: <<Phap_danh>>'")
     print("• Có thể đặt ở bất kỳ đâu: paragraph, table, header, footer")
+    print("📱 OUTPUT: Chỉ tạo file PDF (không tạo DOCX)")
     print("-" * 70)
+
+def convert_to_pdf_safe(docx_path, pdf_path, logger):
+    """Chuyển đổi DOCX sang PDF an toàn"""
+    try:
+        docx_path = Path(docx_path)
+        pdf_path = Path(pdf_path)
+        
+        # Đảm bảo thư mục output tồn tại
+        pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        if sys.platform == "win32":
+            # Windows: Sử dụng docx2pdf (cần MS Word)
+            try:
+                convert(str(docx_path), str(pdf_path))
+                logger.info(f"✅ Chuyển PDF thành công: {pdf_path.name}")
+                return True
+            except Exception as e:
+                logger.error(f"❌ Lỗi chuyển PDF bằng docx2pdf: {str(e)}")
+                return False
+        else:
+            # Linux/Mac: Sử dụng LibreOffice (nếu có cài)
+            try:
+                import subprocess
+                cmd = [
+                    'libreoffice', '--headless', '--convert-to', 'pdf',
+                    '--outdir', str(pdf_path.parent), str(docx_path)
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                if result.returncode == 0:
+                    logger.info(f"✅ Chuyển PDF thành công bằng LibreOffice: {pdf_path.name}")
+                    return True
+                else:
+                    logger.error(f"❌ LibreOffice lỗi: {result.stderr}")
+                    return False
+            except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+                logger.error(f"❌ Không thể dùng LibreOffice: {str(e)}")
+                return False
+    except Exception as e:
+        logger.error(f"❌ Lỗi chuyển PDF: {str(e)}")
+        return False
 
 def main():
     """Hàm chính của chương trình"""
@@ -76,9 +117,9 @@ def main():
     logger = setup_logger("CertificateGenerator", "INFO", True)
     
     print("=" * 70)
-    print("🎓 TOOL TẠO GIẤY KHEN TỰ ĐỘNG")
+    print("📄 TOOL TẠO GIẤY KHEN TỰ ĐỘNG - CHỈ PDF")
     print("   Gia Đình Phật Tử Việt Nam - TP Đà Nẵng")
-    print("   📝 Sử dụng placeholder format: <<Tên_placeholder>>")
+    print("   📝 Sử dụng placeholder format: <<Ten_placeholder>>")
     print("=" * 70)
     
     # Đọc cấu hình
@@ -104,7 +145,7 @@ def main():
         print("\n💡 Hướng dẫn:")
         print("1. Đặt file phôi giấy khen (định dạng .docx) vào thư mục 'templates'")
         print("2. File phôi cần chứa các placeholder:")
-        print("   - <<Họ_và_tên>>, <<Pháp_danh>>, <<Năm_sinh>>, <<Đơn_vị>>")
+        print("   - <<Ho_va_ten>>, <<Phap_danh>>, <<Nam_sinh>>, <<Don_vi>>")
         print("   - <<Do>>, <<Tai>>, <<Ngay>>")
         print("3. Chạy lại chương trình")
         return
@@ -195,7 +236,7 @@ def main():
             return
 
         # Xác nhận tạo giấy khen
-        confirm = input(f"\n❓ Tiến hành tạo {total_records} giấy khen? (y/N): ").strip().lower()
+        confirm = input(f"\n❓ Tiến hành tạo {total_records} giấy khen PDF? (y/N): ").strip().lower()
         if confirm not in ['y', 'yes']:
             print("❌ Đã hủy!")
             return
@@ -207,7 +248,6 @@ def main():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         temp_folder.mkdir(exist_ok=True)
 
-        temp_word_files = []
         pdf_files = []
         success_count = 0
 
@@ -225,11 +265,16 @@ def main():
                 don_vi = safe_str(row.get('DonVi', ''))
 
                 safe_filename = ho_ten.replace(' ', '_').replace('/', '_').replace('\\', '_')
+                
+                # File DOCX tạm thời
                 temp_word_path = temp_folder / f"{stt:03d}_{safe_filename}.docx"
+                # File PDF cuối cùng
+                final_pdf_path = output_folder / f"{stt:03d}_{safe_filename}.pdf"
 
                 print(f"  [{stt:2d}/{total_records}] Đang xử lý: {ho_ten}... ", end='')
 
-                ok = generator.create_certificate(
+                # Tạo DOCX tạm
+                docx_ok = generator.create_certificate(
                     ho_ten=ho_ten,
                     phap_danh=phap_danh,
                     nam_sinh=nam_sinh,
@@ -237,66 +282,62 @@ def main():
                     output_file=temp_word_path
                 )
 
-                if ok:
-                    temp_word_files.append(temp_word_path)
-                    success_count += 1
-                    print("✅")
+                if docx_ok and temp_word_path.exists():
+                    # Chuyển sang PDF
+                    pdf_ok = convert_to_pdf_safe(temp_word_path, final_pdf_path, logger)
+                    
+                    if pdf_ok and final_pdf_path.exists():
+                        pdf_files.append(final_pdf_path)
+                        success_count += 1
+                        print("✅")
+                    else:
+                        print("❌ (PDF)")
+                    
+                    # Xóa DOCX tạm thời
+                    try:
+                        temp_word_path.unlink()
+                    except:
+                        pass
                 else:
-                    print("❌")
+                    print("❌ (DOCX)")
+                    
             except Exception as e:
                 logger.error(f"Lỗi xử lý {row.get('HoTen', 'Unknown')}: {str(e)}")
                 print("❌")
 
         print("-" * 60)
 
-        # Chuyển đổi sang PDF (Windows có MS Word)
-        if temp_word_files:
-            print(f"\n📄 Đang chuyển đổi {len(temp_word_files)} file sang PDF...")
-            for word_file in temp_word_files:
-                try:
-                    pdf_out = output_folder / f"{word_file.stem}.pdf"
-                    if sys.platform == "win32":
-                        try:
-                            convert(str(word_file), str(pdf_out))
-                            pdf_files.append(pdf_out)
-                        except Exception:
-                            # Nếu không chuyển được, copy DOCX ra output
-                            shutil.copy2(word_file, output_folder / word_file.name)
-                            logger.warning(f"Không thể chuyển PDF, giữ DOCX: {word_file.name}")
-                    else:
-                        shutil.copy2(word_file, output_folder / word_file.name)
-                except Exception as e:
-                    logger.error(f"Lỗi chuyển đổi {word_file.name}: {str(e)}")
-
-            # Gộp PDF nếu có
+        # Gộp PDF nếu có và được cấu hình
+        if pdf_files and config.getboolean('OUTPUT', 'create_combined_pdf', fallback=True):
+            print(f"\n📚 Đang gộp {len(pdf_files)} file PDF...")
             try:
                 from PyPDF2 import PdfMerger
-                if pdf_files:
-                    merger = PdfMerger()
-                    for pdf in sorted(pdf_files):
-                        merger.append(str(pdf))
-                    combined_pdf = output_folder / f"GiayKhen_TongHop_{timestamp}.pdf"
-                    merger.write(str(combined_pdf))
-                    merger.close()
-                    logger.info(f"✅ Đã gộp PDF: {combined_pdf.name}")
+                merger = PdfMerger()
+                for pdf in sorted(pdf_files):
+                    merger.append(str(pdf))
+                combined_pdf = output_folder / f"GiayKhen_TongHop_{timestamp}.pdf"
+                merger.write(str(combined_pdf))
+                merger.close()
+                logger.info(f"✅ Đã gộp PDF: {combined_pdf.name}")
             except ImportError:
-                logger.info("🔌 Cài đặt PyPDF2 để gộp các file PDF")
+                logger.info("📌 Cài đặt PyPDF2 để gộp các file PDF")
             except Exception as e:
                 logger.warning(f"Không thể gộp PDF: {str(e)}")
 
-        # Dọn dẹp
+        # Dọn dẹp thư mục temp
         print("\n🧹 Dọn dẹp file tạm...")
-        for p in temp_word_files:
-            try:
-                p.unlink()
-            except Exception:
-                pass
+        try:
+            for file in temp_folder.glob("*"):
+                file.unlink()
+        except Exception:
+            pass
 
         # Kết quả
         print("\n" + "=" * 60)
         print("✅ HOÀN THÀNH!")
-        print(f"📊 Đã tạo: {success_count}/{total_records} giấy khen")
+        print(f"📊 Đã tạo: {success_count}/{total_records} file PDF")
         print(f"📁 Thư mục kết quả: {output_folder}")
+        print("📝 Chỉ có file PDF (không có DOCX)")
         print("=" * 60)
 
         # Mở thư mục output
@@ -318,7 +359,7 @@ def main():
                 print(f"📂 Đã mở thư mục: {output_folder}")
             except Exception as e:
                 print(f"⚠️ Không thể mở thư mục tự động: {str(e)}")
-                print(f"📁 Vui lòng mở thủ công: {output_folder}")
+                print(f"📍 Vui lòng mở thủ công: {output_folder}")
 
     except Exception as e:
         logger.error(f"Lỗi chính: {str(e)}")
