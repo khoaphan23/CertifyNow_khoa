@@ -1,9 +1,7 @@
-import os
 from pathlib import Path
 from docx import Document
 import logging
 from datetime import datetime
-import re
 import sys
 import time
 

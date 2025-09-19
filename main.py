@@ -88,7 +88,6 @@ def convert_to_pdf_safe(docx_path, pdf_path, logger):
             except Exception as e:
                 logger.error(f"❌ Lỗi chuyển PDF bằng docx2pdf: {str(e)}")
                 return False
-        else:
             # Linux/Mac: Sử dụng LibreOffice (nếu có cài)
             try:
                 import subprocess
@@ -319,7 +318,6 @@ def main():
                 # Xử lý tên file từ config - tránh lỗi % formatting
                 combined_name_template = config.get('OUTPUT', 'combined_pdf_name', 
                                                   fallback='Chung_chi_%Y%m%d_%H%M%S')
-                
                 # Xử lý an toàn datetime placeholder
                 try:
                     # Escape % trong ConfigParser bằng cách dùng raw string
